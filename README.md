@@ -1,21 +1,14 @@
 # My Implementation of CS336 Assignment 1: Basics
 
-This repository is my personal, from-scratch implementation of Stanford's
-[CS336](https://stanford-cs336.github.io/) Assignment 1 (Basics): building a
-Transformer language model from the ground up.
-I am not a Stanford student; I'm working through the publicly available course
-materials on my own, purely to learn.
+This repository is my personal, from-scratch implementation of Stanford's [CS336](https://stanford-cs336.github.io/) Assignment 1 (Basics): building a Transformer language model from the ground up, starting with training a BPE tokenizer. I am not a Stanford student; I'm working through the publicly available course materials on my own, purely to learn.
 
-My own code lives under [`src/assignment1/`](./src/assignment1/), with the
-scripts that drive it under [`scripts/`](./scripts/). The assignment handout
-([cs336_assignment1_basics.pdf](./cs336_assignment1_basics.pdf)), the tests, and
-the starter file [pretokenization_example.py](./cs336_basics/pretokenization_example.py) are the course's original materials.
+My own code lives under [`src/assignment1/`](./src/assignment1/), with the scripts that drive it under [`scripts/`](./scripts/). The only things used to build this are the assignment handout ([cs336_assignment1_basics.pdf](./cs336_assignment1_basics.pdf)), the tests, and the starter file [pretokenization_example.py](./cs336_basics/pretokenization_example.py). Beyond these three things, everything is written by me.
 
-In keeping with the course's AI policy, all of the implementation code here is
-written by me. None of it is written or autocompleted by AI. I only use an AI
-assistant the way the policy permits: to occasionally ask high-level conceptual
-or low-level documentation questions when I am truly stuck. The implementations
-are my own work.
+Note I do not give the most optimal implementation of every step, rather, I aim to simply give implementations that are performant enough for my needs.
+
+I plan on building everything so that it runs on my MacBook (M3 Pro 18GB RAM) and on WSL2 on my PC (Which has an RTX 5070 Ti GPU).
+
+In keeping with the course's AI policy, all of the implementation code here is written by me. None of it is written or autocompleted by AI. I only use an AI assistant the way the policy permits: to occasionally ask high-level conceptual or low-level documentation questions when I am truly stuck. The implementations are my own work.
 
 ---
 
