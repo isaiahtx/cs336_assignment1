@@ -1,10 +1,25 @@
-# CS336 Spring 2025 Assignment 1: Basics
+# My Implementation of CS336 Assignment 1: Basics
 
-For a full description of the assignment, see the assignment handout at
-[cs336_assignment1_basics.pdf](./cs336_assignment1_basics.pdf)
+This repository is my personal, from-scratch implementation of Stanford's
+[CS336](https://stanford-cs336.github.io/) Assignment 1 (Basics): building a
+Transformer language model from the ground up.
+I am not a Stanford student; I'm working through the publicly available course
+materials on my own, purely to learn.
 
-If you see any issues with the assignment handout or code, please feel free to
-raise a GitHub issue or open a pull request with a fix.
+My own code lives under [`src/assignment1/`](./src/assignment1/), with the
+scripts that drive it under [`scripts/`](./scripts/). The assignment handout
+([cs336_assignment1_basics.pdf](./cs336_assignment1_basics.pdf)), the tests, and
+the starter file [pretokenization_example.py](./cs336_basics/pretokenization_example.py) are the course's original materials.
+
+In keeping with the course's AI policy, all of the implementation code here is
+written by me. None of it is written or autocompleted by AI. I only use an AI
+assistant the way the policy permits: to occasionally ask high-level conceptual
+or low-level documentation questions when I am truly stuck. The implementations
+are my own work.
+
+---
+
+The original assignment setup instructions follow.
 
 ## Setup
 
