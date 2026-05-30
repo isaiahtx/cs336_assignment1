@@ -12,8 +12,8 @@ if __name__ == "__main__":
         32_000,
         special_tokens,
         pretokenizer_pattern=r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
-        num_processes=12,
-        desired_num_chunks=10_000,
+        num_processes=16,
+        desired_num_chunks=16 * 1_000,
     )
 
     results_folder = Path("results/bpe_train_owt")

@@ -12,8 +12,8 @@ if __name__ == "__main__":
         10_000,
         special_tokens,
         pretokenizer_pattern = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
-        num_processes = 6,
-        desired_num_chunks = 6 * 4,
+        num_processes = 16,
+        desired_num_chunks = 16 * 4,
     )
 
     results_folder = Path("results/bpe_train_tiny_stories_valid")

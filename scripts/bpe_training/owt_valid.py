@@ -12,7 +12,7 @@ if __name__ == "__main__":
         32_000,
         special_tokens,
         pretokenizer_pattern=r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
-        num_processes=12,
+        num_processes=16,
         desired_num_chunks=6 * 48,
     )
 

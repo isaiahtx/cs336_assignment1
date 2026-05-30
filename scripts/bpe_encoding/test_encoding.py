@@ -9,21 +9,7 @@ def main():
         vocab_path="./tests/fixtures/gpt2_vocab.json",
         merges_path="./tests/fixtures/gpt2_merges.txt",
     )
-    
-    merges = tokenizer.merges
-    print([(i,a,b) for i,(a,b) in enumerate(merges) if a + b == b'icated'])
-    print([(i,a,b) for i,(a,b) in enumerate(merges) if a + b == b'ated'])
-    print()
-    print()
-    
     print(tokenizer.encode("dedicated"))
-    print()
-    print()
-
-    print(b'icate' in tokenizer.vocab.values())
-    print()
-    print()
-    # print(sorted(tokenizer.vocab.values()))
 
 def main2():
     tokenizer_folder = Path('./results/bpe_train_tiny_stories')

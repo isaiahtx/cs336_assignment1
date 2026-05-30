@@ -4,6 +4,7 @@ from itertools import chain
 from collections import defaultdict
 import pickle
 from pathlib import Path
+from heapq import heappush, heappop
 
 class Tokenizer:
     vocab: Dict[int, bytes]
@@ -19,6 +20,7 @@ class Tokenizer:
         ):
         self.vocab = vocab
         self.merges = merges
+        self.merges_to_idx = {(a,b):i for i,(a,b) in enumerate(merges)}
         self.special_tokens = None if special_tokens is None else sorted(special_tokens,key=len,reverse=True)
         self.pretokenizer_pattern = pretokenizer_pattern
         
@@ -66,26 +68,52 @@ class Tokenizer:
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         for text in iterable:
             for ptk, is_special in self.pretokenize(text):
+                # print(f'scanning {ptk}')
                 ptk = ptk.encode('utf-8')
                 if is_special:
                     yield self.bytes_to_id[ptk]
                 else:
                     ptk = tuple(bytes([b]) for b in ptk)
-
                     while True:
-                        found = False
-                        for idx,(a,b) in enumerate(self.merges):
-                            i = 0
-                            while i+1 < len(ptk):
-                                if ptk[i] == a and ptk[i+1] == b:
-                                    found = True
-                                    ptk = ptk[:i] + (a + b,) + ptk[i+2:]
-                                i += 1
-                        if not found:
+                        replace_indices = []
+                        min_idx = None
+                        to_merge = None
+                        for i in range(len(ptk) - 1):
+                            a = ptk[i]; b = ptk[i+1]
+                            idx = self.merges_to_idx.get((a,b))
+                            if idx is None:
+                                continue
+                            if min_idx is None or idx < min_idx:
+                                # print(f'\tfound new smallest mergeable pair ({a},{b}) with idx {idx} at index {i}')
+                                min_idx = idx
+                                to_merge = a+b
+                                replace_indices = [i]
+                            elif idx == min_idx:
+                                # print(f'\tfound smallest mergeable pair ({a},{b}) with idx {idx} at index {i}')
+                                replace_indices.append(i)
+                        if len(replace_indices) == 1:
+                            # print(f'\treplacing with {to_merge} at indices {",".join(map(str,replace_indices))}')
+                            i = replace_indices[0]
+                            new_ptk = ptk[:i] + (to_merge,) + ptk[i+2:]
+                            # print(f"\t\treplaced {ptk} with {new_ptk}")
+                            ptk = new_ptk
+                        elif len(replace_indices) > 1:
+                            # print(f'\treplacing with {to_merge} at indices {",".join(map(str,replace_indices))}')
+                            first = replace_indices[0]
+                            last = replace_indices[-1]
+                            new_ptk = ptk[:first] + (to_merge,)
+                            for i,j in zip(replace_indices,replace_indices[1:]):
+                                new_ptk += ptk[i+2:j] + (to_merge,)
+                            new_ptk += ptk[last+2:]
+                            # print(f"\t\treplaced {ptk} with {new_ptk}")
+                            ptk = new_ptk
+                        else:
+                            # print(f"\t\tscanned {ptk} found nothing, yielding")
+                            for t in ptk:
+                                yield(self.bytes_to_id[t])
                             break
-                    
-                    for e in ptk:
-                        yield self.bytes_to_id[e]
+                        
+                
 
     def decode(self, ids: List[int]) -> str:
         bts = b"".join(map(self.vocab.get,ids))
