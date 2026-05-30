@@ -21,7 +21,6 @@ dependencies = [
     "ruff>=0.15.8",
     "scalene>=2.3.0",
     "py-spy>=0.4.2",
-    "memray>=1.19.3",
 ]
 
 [build-system]
