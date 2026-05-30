@@ -1,8 +1,9 @@
-from typing import List, Iterable, BinaryIO, Dict, Tuple, Optional
+from typing import List, BinaryIO, Dict, Tuple, Optional
 import regex as re
 from collections import Counter, defaultdict
 import os
-from multiprocessing import Pool
+from tqdm.contrib.concurrent import process_map
+from tqdm.auto import tqdm
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -59,32 +60,49 @@ def process_chunk(input_path, start, end, special_tokens, pretokenizer_pattern):
     ]
     return Counter(pretokens)
 
+def process_chunk_star(arg):
+    return process_chunk(*arg)
 
 def pretokenize_for_training(
     input_path: str,
     special_tokens: List[str],
     pretokenizer_pattern: str = r"...",
-    num_processes: int = 4,
+    num_processes: int = 8,
     desired_num_chunks: Optional[int] = None,
 ) -> Dict[Tuple[bytes, ...], int]:
     if desired_num_chunks is None:
-        desired_num_chunks = num_processes 
+        desired_num_chunks = num_processes * 4
+    
+    print(f"Pretokenizing with {num_processes} processes and {desired_num_chunks} desired chunks.")
 
     with open(input_path, "rb") as f:
         boundaries = find_chunk_boundaries(f, desired_num_chunks, special_tokens)
+    
+    sizes = [b - a for a, b in zip(boundaries, boundaries[1:])]
+    print(f"found {len(sizes)} chunks; min/max chunk sizes: {min(sizes)/1e6:.3f} / {max(sizes)/1e6:.3f} MB")
 
     args = [
         (input_path, start, end, special_tokens, pretokenizer_pattern)
         for start, end in zip(boundaries[:-1], boundaries[1:])
     ]
-
-    with Pool(processes=num_processes) as pool:
-        results = pool.starmap(process_chunk, args)
+    
+    results = process_map(
+        process_chunk_star,
+        args,
+        max_workers=num_processes,
+        chunksize=10,
+    )
+    
+    print("Combining each chunk's pretoken frequencies")
 
     out = defaultdict(int)
     for result in results:
         for k, v in result.items():
-            out[tuple(bytes([b]) for b in k.encode())] += v
+            out[k] += v
+    
+    out = dict(map(lambda it: (tuple(bytes([b]) for b in it[0].encode()),it[1]),out.items()))
+
+    print(f"Pretokenization finished")
     return out
 
 
@@ -122,33 +140,35 @@ def train_bpe_slow(
 
     merges = []
     
-    while len(vocab) < vocab_size:
-        pairs = defaultdict(lambda: 0)
-        for ptk, n in frequencies.items():
-            for i in range(1,len(ptk)):
-                pairs[(ptk[i-1],ptk[i])] += n
+    with tqdm(total=vocab_size, initial=len(vocab)) as pbar:
+        while len(vocab) < vocab_size:
+            pairs = defaultdict(lambda: 0)
+            for ptk, n in frequencies.items():
+                for i in range(1,len(ptk)):
+                    pairs[(ptk[i-1],ptk[i])] += n
+                
+            if not pairs:
+                break
+            to_merge,_ = max(pairs.items(),key=lambda x:(x[1],x[0]))
+            merged = to_merge[0] + to_merge[1]
+            pairs.pop(to_merge)
             
-        if not pairs:
-            break
-        to_merge,_ = max(pairs.items(),key=lambda x:(x[1],x[0]))
-        merged = to_merge[0] + to_merge[1]
-        pairs.pop(to_merge)
-        
-        vocab[len(vocab)] = merged
-        
-        new_frequencies = frequencies.copy()
-        for ptk,n in frequencies.items():
-            i = 1
-            while i < len(ptk):
-                if (ptk[i-1],ptk[i]) == to_merge:
-                    new_frequencies.pop(ptk)
-                    ptk = ptk[:i-1] + (merged,) + ptk[i+1:]
-                    new_frequencies[ptk] = n
-                else:
-                    i += 1
-        
-        frequencies = new_frequencies
-        merges.append(to_merge)
+            new_frequencies = frequencies.copy()
+            for ptk,n in frequencies.items():
+                i = 1
+                while i < len(ptk):
+                    if (ptk[i-1],ptk[i]) == to_merge:
+                        new_frequencies.pop(ptk)
+                        ptk = ptk[:i-1] + (merged,) + ptk[i+1:]
+                        new_frequencies[ptk] = n
+                    else:
+                        i += 1
+            
+            frequencies = new_frequencies
+            vocab[len(vocab)] = merged
+            merges.append(to_merge)
+
+            pbar.update(1)
     
     return vocab, merges
 
@@ -175,17 +195,29 @@ def train_bpe(
         input_path: str,
         vocab_size: int,
         special_tokens: List[str],
-        pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
-    ):
+        pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
+        num_processes: int = 6,
+        desired_num_chunks: Optional[int] = None,
+    ) -> Tuple[Dict[int,bytes],List[Tuple[bytes,bytes]]]:
     vocab = {id:bytes([id]) for id in range(256)}
 
     for st in special_tokens:
         vocab[len(vocab)] = st.encode()
 
     if special_tokens:
-        frequencies = pretokenize_for_training(input_path,special_tokens,pretokenizer_pattern)
+        frequencies = pretokenize_for_training(
+            input_path,
+            special_tokens,
+            pretokenizer_pattern,
+            num_processes,
+            desired_num_chunks
+        )
     else:
-        frequencies = pretokenize_for_training_slow(input_path,special_tokens,pretokenizer_pattern)
+        frequencies = pretokenize_for_training_slow(
+            input_path,
+            special_tokens,
+            pretokenizer_pattern
+        )
     
     merges = []
 
@@ -197,43 +229,40 @@ def train_bpe(
             pairs[pair] += n
             inverted_index[pair].add(old_ptk)
 
-    while len(vocab) < vocab_size:
-        if not pairs:
-            break
+    print(f"Starting merging, current vocab length {len(vocab)}/{vocab_size}")
+    with tqdm(total=vocab_size, initial=len(vocab)) as pbar:
+        while len(vocab) < vocab_size:
+            if not pairs:
+                break
 
-        to_merge,_ = max(pairs.items(),key=lambda x:(x[1],x[0]))
-        merged = to_merge[0] + to_merge[1]
-        pairs.pop(to_merge)
+            to_merge,_ = max(pairs.items(),key=lambda x:(x[1],x[0]))
+            merged = to_merge[0] + to_merge[1]
+            pairs.pop(to_merge)
 
-        ptks_to_update = inverted_index[to_merge].copy()
+            ptks_to_update = inverted_index[to_merge].copy()
 
-        for old_ptk in ptks_to_update:
-            n = frequencies.pop(old_ptk)
-            new_ptk = merge_pretoken(old_ptk,to_merge)
-            old_pairs = Counter(zip(old_ptk[:-1],old_ptk[1:]))
-            new_pairs = Counter(zip(new_ptk[:-1],new_ptk[1:]))
+            for old_ptk in ptks_to_update:
+                n = frequencies.pop(old_ptk)
+                new_ptk = merge_pretoken(old_ptk,to_merge)
+                old_pairs = Counter(zip(old_ptk[:-1],old_ptk[1:]))
+                new_pairs = Counter(zip(new_ptk[:-1],new_ptk[1:]))
 
-            for p,c in old_pairs.items():
-                pairs[p] -= n * c
-                if pairs[p] <= 0:
-                    del pairs[p]
-            for p,c in new_pairs.items():
-                pairs[p] += n * c
-            
-            frequencies[new_ptk] = frequencies.get(new_ptk,0) + n
-            
-            for pair in old_pairs:
-                inverted_index[pair].remove(old_ptk)
-            for pair in new_pairs:
-                inverted_index[pair].add(new_ptk)
+                for p,c in old_pairs.items():
+                    pairs[p] -= n * c
+                    if pairs[p] <= 0:
+                        del pairs[p]
+                for p,c in new_pairs.items():
+                    pairs[p] += n * c
+                
+                frequencies[new_ptk] = frequencies.get(new_ptk,0) + n
+                
+                for pair in old_pairs:
+                    inverted_index[pair].remove(old_ptk)
+                for pair in new_pairs:
+                    inverted_index[pair].add(new_ptk)
 
-        vocab[len(vocab)] = merged
-        merges.append(to_merge)
+            vocab[len(vocab)] = merged
+            merges.append(to_merge)
+            pbar.update(1)
     
-    # print(merges)
     return vocab, merges
-
-
-if __name__ == "__main__":
-    # train_bpe('./data/train_eg.txt',1000,["<|endoftext|>"])
-    train_bpe('./data/train_eg.txt',500,[" ","<|endoftext|>"], pretokenizer_pattern=r".+")
