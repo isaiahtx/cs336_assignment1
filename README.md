@@ -6,9 +6,9 @@ My own code lives under [`src/assignment1/`](./src/assignment1/), with the scrip
 
 Note I do not give the most optimal implementation of every step, rather, I aim to simply give implementations that are performant enough for my needs.
 
-I plan on building everything so that it runs on my MacBook (M3 Pro 18GB RAM) and on WSL2 on my PC (Which has an RTX 5070 Ti GPU).
+I am building everything so that it runs on my MacBook (M3 Pro 18GB RAM) and on my desktop computer (Which runs Arch Linux with a Ryzen 7 9800X3D, 32GB of RAM, and an RTX 5070 Ti).
 
-In keeping with the course's AI policy, all of the implementation code here is written by me. None of it is written or autocompleted by AI. I only use an AI assistant the way the policy permits: to occasionally ask high-level conceptual or low-level documentation questions when I am truly stuck. The implementations are my own work.
+In keeping with the course's AI policy, all of the implementation code here is written by me. None of it is written or autocompleted by AI. I only use an AI assistant the way the policy permits: to occasionally ask high-level conceptual or low-level documentation questions on specific python libraries/syntax. All implementations and architectural designs are my own work.
 
 ---
 

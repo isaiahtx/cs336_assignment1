@@ -1,51 +1,9 @@
-from typing import List, BinaryIO, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional
 import regex as re
 from collections import Counter, defaultdict
-import os
 from tqdm.contrib.concurrent import process_map
 from tqdm.auto import tqdm
-
-def find_chunk_boundaries(
-    file: BinaryIO,
-    desired_num_chunks: int,
-    special_tokens: list[str],
-) -> list[int]:
-    assert special_tokens, "Need at least one special token to align boundaries"
-
-    pattern = re.compile(b"|".join(re.escape(st.encode()) for st in sorted(special_tokens,key=len,reverse=True)))
-    max_tok_len = max(len(st.encode()) for st in special_tokens)
-    overlap = max_tok_len - 1
-
-    file.seek(0, os.SEEK_END)
-    file_size = file.tell()
-    file.seek(0)
-
-    chunk_size = file_size // desired_num_chunks
-    chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
-    chunk_boundaries[-1] = file_size
-
-    mini_chunk_size = 4096
-
-    for bi in range(1, len(chunk_boundaries) - 1):
-        # use a small overlap for each mini chunk to avoid missing special tokens which fall on boundaries
-        pos = chunk_boundaries[bi]
-        file.seek(pos)
-        carry = b""
-        while True:
-            mini_chunk = file.read(mini_chunk_size)
-            if not mini_chunk:
-                chunk_boundaries[bi] = file_size
-                break
-            buf = carry + mini_chunk
-            m = pattern.search(buf)
-            if m is not None:
-                chunk_boundaries[bi] = pos - len(carry) + m.start()
-                break
-            carry = buf[-overlap:] if overlap > 0 else b""
-            pos += len(mini_chunk)
-
-    return sorted(set(chunk_boundaries))
-
+from src.assignment1.bpe.utils import find_chunk_boundaries
 
 def process_chunk(input_path, start, end, special_tokens, pretokenizer_pattern):
     with open(input_path, "rb") as f:
@@ -76,7 +34,7 @@ def pretokenize_for_training(
     print(f"Pretokenizing with {num_processes} processes and {desired_num_chunks} desired chunks.")
 
     with open(input_path, "rb") as f:
-        boundaries = find_chunk_boundaries(f, desired_num_chunks, special_tokens)
+        boundaries = find_chunk_boundaries(f, special_tokens, desired_num_chunks=desired_num_chunks)
     
     sizes = [b - a for a, b in zip(boundaries, boundaries[1:])]
     print(f"found {len(sizes)} chunks; min/max chunk sizes: {min(sizes)/1e6:.3f} / {max(sizes)/1e6:.3f} MB")
@@ -95,12 +53,11 @@ def pretokenize_for_training(
     
     print("Combining each chunk's pretoken frequencies")
 
-    out = defaultdict(int)
-    for result in results:
-        for k, v in result.items():
-            out[k] += v
+    out = results[0]
+    for result in results[1:]:
+        out.update(result)
     
-    out = dict(map(lambda it: (tuple(bytes([b]) for b in it[0].encode()),it[1]),out.items()))
+    out = {tuple(bytes([b]) for b in k.encode()):v for k,v in out.items()}
 
     print(f"Pretokenization finished")
     return out
