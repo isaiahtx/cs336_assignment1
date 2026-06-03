@@ -1,16 +1,15 @@
 from src.assignment1.bpe.tokenizer import Tokenizer, encode_file_to_chunks
-from src.assignment1.bpe.utils import sample_documents, find_chunk_boundaries
+from src.assignment1.bpe.utils import sample_documents
 import time
 import os
 import shutil
 import pickle
-from tqdm.auto import tqdm
 from pathlib import Path
 
 
-def get_dir_size(dir_path):
+def get_dir_size(dir_path: str | Path):
     total_size = 0
-    for dirpath, dirnames, filenames in os.walk(dir_path):
+    for dirpath, _, filenames in os.walk(dir_path):
         for file in filenames:
             file_path = os.path.join(dirpath, file)
             total_size += os.path.getsize(file_path)
@@ -25,7 +24,7 @@ def parts_a_and_b():
         ts_special_tokens = pickle.load(f)
 
     owt_special_tokens_path = "results/bpe_train_owt/special_tokens.pkl"
-    with open(ts_special_tokens_path, "rb") as f:
+    with open(owt_special_tokens_path, "rb") as f:
         owt_special_tokens = pickle.load(f)
 
     ts_tokenizer = Tokenizer.from_files(
@@ -109,7 +108,7 @@ def part_d():
         ts_special_tokens = pickle.load(f)
 
     owt_special_tokens_path = "results/bpe_train_owt/special_tokens.pkl"
-    with open(ts_special_tokens_path, "rb") as f:
+    with open(owt_special_tokens_path, "rb") as f:
         owt_special_tokens = pickle.load(f)
 
     ts_tokenizer = Tokenizer.from_files(

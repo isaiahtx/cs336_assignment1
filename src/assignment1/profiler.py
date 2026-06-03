@@ -3,9 +3,14 @@ import threading
 import os
 import time
 import csv
-from typing import Callable
+from typing import Callable, Any
 
-def sample_tree(stop, rows, interval=0.2, debug=False):
+def sample_tree(
+        stop: threading.Event,
+        rows: list[tuple[float, float, float, int, int]],
+        interval: float = 0.2,
+        debug: bool = False
+    ):
     pid = os.getpid()
     print(f"Starting monitoring process {pid}")
     parent = psutil.Process(pid)
@@ -33,13 +38,14 @@ def sample_tree(stop, rows, interval=0.2, debug=False):
         time.sleep(interval)
 
 def run_with_monitor(
-    function: Callable,
-        *args,
+    function: Callable[...,Any],  # pyright: ignore[reportExplicitAny]
+        *args: Any,  # pyright: ignore[reportExplicitAny]
         _interval: float = 0.2,
         _profile_output: str = "mem_trace.csv",
-        **kwargs
+        **kwargs: Any,  # pyright: ignore[reportExplicitAny]
     ):
-    stop, rows = threading.Event(), []
+    stop: threading.Event = threading.Event()
+    rows: list[tuple[float, float, float, int, int]] = []
     monitor = threading.Thread(target=sample_tree, args=(stop,rows,_interval), daemon=True)
     monitor.start()
     

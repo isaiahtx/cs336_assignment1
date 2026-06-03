@@ -1,11 +1,17 @@
-from typing import List, Dict, Tuple, Optional
 import regex as re
 from collections import Counter, defaultdict
 from tqdm.contrib.concurrent import process_map
 from tqdm.auto import tqdm
 from src.assignment1.bpe.utils import find_chunk_boundaries
+from pathlib import Path
 
-def process_chunk(input_path, start, end, special_tokens, pretokenizer_pattern):
+def process_chunk(
+        input_path: str | Path,
+        start: int,
+        end: int,
+        special_tokens: list[str],
+        pretokenizer_pattern: str,
+    ):
     with open(input_path, "rb") as f:
         f.seek(start)
         chunk = f.read(end - start).decode("utf-8", errors="ignore")
@@ -18,16 +24,16 @@ def process_chunk(input_path, start, end, special_tokens, pretokenizer_pattern):
     ]
     return Counter(pretokens)
 
-def process_chunk_star(arg):
+def process_chunk_star(arg: tuple[str|Path,int,int,list[str],str]):
     return process_chunk(*arg)
 
 def pretokenize_for_training(
     input_path: str,
-    special_tokens: List[str],
+    special_tokens: list[str],
     pretokenizer_pattern: str = r"...",
     num_processes: int = 8,
-    desired_num_chunks: Optional[int] = None,
-) -> Dict[Tuple[bytes, ...], int]:
+    desired_num_chunks: int | None = None,
+) -> dict[tuple[bytes, ...], int]:
     if desired_num_chunks is None:
         desired_num_chunks = num_processes * 4
     
@@ -55,7 +61,7 @@ def pretokenize_for_training(
 
     out = results[0]
     for result in results[1:]:
-        out.update(result)
+        out += result
     
     out = {tuple(bytes([b]) for b in k.encode()):v for k,v in out.items()}
 
@@ -65,9 +71,9 @@ def pretokenize_for_training(
 
 def pretokenize_for_training_slow(
         input_path: str,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
-    ) -> Dict[Tuple[bytes,...],int]:
+    ) -> dict[tuple[bytes,...],int]:
     with open(input_path,'r') as f:
         text = f.read()
 
@@ -85,9 +91,9 @@ def pretokenize_for_training_slow(
 def train_bpe_slow(
         input_path: str,
         vocab_size: int,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
-    ):
+    ) -> tuple[dict[int,bytes],list[tuple[bytes,bytes]]]:
     vocab = {id:bytes([id]) for id in range(256)}
 
     for st in special_tokens:
@@ -95,11 +101,11 @@ def train_bpe_slow(
 
     frequencies = pretokenize_for_training_slow(input_path,special_tokens,pretokenizer_pattern)
 
-    merges = []
+    merges: list[tuple[bytes,bytes]] = []
     
     with tqdm(total=vocab_size, initial=len(vocab)) as pbar:
         while len(vocab) < vocab_size:
-            pairs = defaultdict(lambda: 0)
+            pairs: defaultdict[tuple[bytes,bytes],int] = defaultdict(lambda: 0)
             for ptk, n in frequencies.items():
                 for i in range(1,len(ptk)):
                     pairs[(ptk[i-1],ptk[i])] += n
@@ -130,9 +136,9 @@ def train_bpe_slow(
     return vocab, merges
 
 
-def merge_pretoken(ptk: Tuple[bytes,...], to_merge: Tuple[bytes,bytes]) -> Tuple[bytes,...]:
-    merged = to_merge[0] + to_merge[1]
-    out = []
+def merge_pretoken(ptk: tuple[bytes,...], to_merge: tuple[bytes,bytes]) -> tuple[bytes,...]:
+    merged: bytes = to_merge[0] + to_merge[1]
+    out: list[bytes] = []
     i = 0
     while i < len(ptk):
         if i+1 == len(ptk):
@@ -151,11 +157,11 @@ def merge_pretoken(ptk: Tuple[bytes,...], to_merge: Tuple[bytes,bytes]) -> Tuple
 def train_bpe(
         input_path: str,
         vocab_size: int,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
         num_processes: int = 6,
-        desired_num_chunks: Optional[int] = None,
-    ) -> Tuple[Dict[int,bytes],List[Tuple[bytes,bytes]]]:
+        desired_num_chunks: int | None = None,
+    ) -> tuple[dict[int,bytes],list[tuple[bytes,bytes]]]:
     vocab = {id:bytes([id]) for id in range(256)}
 
     for st in special_tokens:
@@ -176,10 +182,10 @@ def train_bpe(
             pretokenizer_pattern
         )
     
-    merges = []
+    merges: list[tuple[bytes,bytes]] = []
 
-    pairs = defaultdict(lambda: 0)
-    inverted_index = defaultdict(lambda: set())
+    pairs: defaultdict[tuple[bytes,bytes],int] = defaultdict(lambda: 0)
+    inverted_index: defaultdict[tuple[bytes,bytes],set[tuple[bytes,...]]] = defaultdict(lambda: set())
     for old_ptk, n in frequencies.items():
         for i in range(1,len(old_ptk)):
             pair = (old_ptk[i-1],old_ptk[i])

@@ -1,4 +1,4 @@
-from typing import BinaryIO, Union, List, Optional
+from typing import BinaryIO
 import os
 import regex as re
 from pathlib import Path
@@ -8,9 +8,9 @@ def find_chunk_boundaries(
     file: BinaryIO,
     special_tokens: list[str],
     *,
-    desired_num_chunks: Optional[int] = None,
-    desired_chunk_size_mb: Optional[float] = 1.0,
-    with_ending_tokens=True,
+    desired_num_chunks: int | None = None,
+    desired_chunk_size_mb: float | None = 1.0,
+    with_ending_tokens: bool = True,
 ) -> list[int]:
     if (desired_num_chunks is None) == (desired_chunk_size_mb is None):
         raise ValueError("Exactly one of desired_num_chunks and desired_chunk_size must be None")
@@ -21,6 +21,10 @@ def find_chunk_boundaries(
     
     if desired_chunk_size_mb is not None:
         desired_num_chunks = int((file_size / (1024 ** 2)) / desired_chunk_size_mb)
+    elif desired_num_chunks is not None:
+        desired_chunk_size_mb = int((file_size / desired_num_chunks) / (1024 ** 2))
+    else:
+        raise RuntimeError("This is impossible to reach")
 
     assert special_tokens, "Need at least one special token to align boundaries"
 
@@ -58,11 +62,14 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 
-def sample_documents(dataset_path: Union[Path,str], n: int = 10, special_tokens: List[str] = ["<|endoftext|>"], seed = None) -> List[str]:
+def sample_documents(dataset_path: Path | str, n: int = 10, special_tokens: list[str]| None = None, seed: int | None = None) -> list[str]:
+    if special_tokens is None:
+        special_tokens = ["<|endoftext|>"]
+
     with open(dataset_path,"rb") as f:
         f.seek(0,os.SEEK_END)
         file_size = f.tell()
-        stories = []
+        stories: list[str] = []
         chunk_size = 1 << 12
         pattern = re.compile(b"|".join(re.escape(st.encode()) for st in special_tokens))
         random.seed(seed)

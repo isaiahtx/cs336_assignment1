@@ -50,3 +50,12 @@ line-length = 120
 [tool.ruff.lint]
 extend-select = ["UP"]
 ignore = ["F722"]
+
+[tool.basedpyright]
+typeCheckingMode = "recommended"
+reportAny = false
+reportUnusedCallResult = false
+reportImplicitOverride = false
+reportUnannotatedClassAttribute = false
+reportUnknownVariableType = false
+reportMissingTypeStubs = false

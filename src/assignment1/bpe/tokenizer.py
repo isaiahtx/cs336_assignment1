@@ -1,7 +1,7 @@
 from __future__ import annotations
 from src.assignment1.bpe.utils import find_chunk_boundaries
-import os
-from typing import Iterable, Self, Dict, List, Tuple, Optional, Iterator
+from collections.abc import Iterable, Iterator
+from typing import Self
 import regex as re
 import pickle
 from tqdm.contrib.concurrent import process_map
@@ -10,15 +10,15 @@ from pathlib import Path
 
 
 class Tokenizer:
-    vocab: Dict[int, bytes]
-    merges: List[Tuple[bytes,bytes]]
-    special_tokens: List[str]
+    vocab: dict[int, bytes]
+    merges: list[tuple[bytes,bytes]]
+    special_tokens: list[str] | None
 
     def __init__(
             self,
-            vocab: Dict[int, bytes],
-            merges: List[Tuple[bytes, bytes]],
-            special_tokens: Optional[List[str]] = None,
+            vocab: dict[int, bytes],
+            merges: list[tuple[bytes, bytes]],
+            special_tokens: list[str] | None = None,
             pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
         ):
         self.vocab = vocab
@@ -31,10 +31,10 @@ class Tokenizer:
     @classmethod
     def from_files(
         cls,
-        vocab_filepath: str,
-        merges_filepath: str,
-        special_tokens: Optional[List[str]] = None,
-        pretokenizer_pattern: Optional[str] = None,
+        vocab_filepath: str | Path,
+        merges_filepath: str | Path,
+        special_tokens: list[str] | None = None,
+        pretokenizer_pattern: str | None = None,
     ) -> Self:
         with open(vocab_filepath,'rb') as f:
             vocab = pickle.load(f)
@@ -42,13 +42,12 @@ class Tokenizer:
         with open(merges_filepath,'rb') as f:
             merges = pickle.load(f)
         
-        args = [vocab, merges, special_tokens]
-        if pretokenizer_pattern is not None:
-            args.append(pretokenizer_pattern)
-
-        return Tokenizer(*args)
+        if pretokenizer_pattern is None:
+            return cls(vocab,merges,special_tokens)
+        else:
+            return cls(vocab,merges,special_tokens,pretokenizer_pattern)
     
-    def pretokenize(self, text: str) -> Iterator[Tuple[str,bool]]:
+    def pretokenize(self, text: str) -> Iterator[tuple[str,bool]]:
         if self.special_tokens:
             delim = re.compile("(" + "|".join(re.escape(st) for st in self.special_tokens) + ")")
             pieces = re.split(delim,text)
@@ -64,7 +63,7 @@ class Tokenizer:
                 for ptk in map(lambda m:m.group(),re.finditer(pat, piece)):
                     yield (ptk, False)
     
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text: str) -> list[int]:
         return list(self.encode_iterable([text]))
     
 
@@ -77,12 +76,13 @@ class Tokenizer:
                     yield self.bytes_to_id[ptk]
                 else:
                     ptk = tuple(bytes([b]) for b in ptk)
+                    to_merge = b""
                     while True:
                         replace_indices = []
                         min_idx = None
-                        to_merge = None
                         for i in range(len(ptk) - 1):
-                            a = ptk[i]; b = ptk[i+1]
+                            a = ptk[i]
+                            b = ptk[i+1]
                             idx = self.merges_to_idx.get((a,b))
                             if idx is None:
                                 continue
@@ -110,12 +110,12 @@ class Tokenizer:
                             break
                 
 
-    def decode(self, ids: List[int]) -> str:
-        bts = b"".join(map(self.vocab.get,ids))
+    def decode(self, ids: list[int]) -> str:
+        bts = b"".join(map(lambda id: self.vocab[id],ids))
         return bts.decode('utf-8',errors='replace')
 
 
-def _process_chunk(args: Tuple["Tokenizer",str,str,int,int,int]):
+def _process_chunk(args: tuple["Tokenizer",str,str,int,int,int]) -> tuple[int,Path,int]:
     tokenizer, input_path, output_path, idx, start, end = args
     with open(input_path,"rb") as f:
         f.seek(start)
@@ -131,10 +131,13 @@ def encode_file_to_chunks(
     input_path: str,
     output_path: str,
     *,
-    desired_num_chunks: Optional[int] = None,
-    desired_chunk_size_mb: Optional[float] = 1.0,
+    desired_num_chunks: int | None = None,
+    desired_chunk_size_mb: float | None = 1.0,
     num_workers: int=16
-) -> List[Path]:
+) -> list[tuple[int,Path,int]]:
+    if not tokenizer.special_tokens:
+        raise ValueError("Tokenizer must have special tokens in order to call encode_file_to_chunks")
+
     Path(output_path).mkdir(parents=True,exist_ok=False)
 
     with open(input_path,"rb") as f:
@@ -145,9 +148,9 @@ def encode_file_to_chunks(
             desired_chunk_size_mb=desired_chunk_size_mb,
             with_ending_tokens=True
         )
-    chunksize = 10#min(max(20,round((len(chunk_boundaries) - 1) / (num_workers * 10))),100)
+    chunksize = 10
     print(f"\tEncoding {len(chunk_boundaries) - 1} chunks across {num_workers} workers, in batches of {chunksize} chunks per worker")
-    
+
     return process_map(
         _process_chunk,
         [
