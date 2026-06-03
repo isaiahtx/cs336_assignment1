@@ -11,7 +11,7 @@ from torch import Tensor
 
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
-from src.assignment1.nn_modules import Linear, Embedding
+from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU
 import einx
 
 def run_linear(
@@ -35,7 +35,7 @@ def run_linear(
 
     linear = Linear(d_in,d_out)
     linear.load_state_dict({"W":weights})
-    return linear.forward(in_features)
+    return linear(in_features)
 
 
 def run_embedding(
@@ -59,7 +59,7 @@ def run_embedding(
 
     embedding = Embedding(vocab_size, d_model)
     embedding.load_state_dict({"W":weights})
-    return embedding.forward(token_ids)
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -91,7 +91,14 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+
+    swiglu = SwiGLU(d_model,d_ff)
+    swiglu.load_state_dict({
+        "W1":w1_weight,
+        "W2":w2_weight,
+        "W3":w3_weight
+    })
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -386,7 +393,9 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    rmsnorm = RMSNorm(d_model,eps)
+    rmsnorm.load_state_dict({"gain":weights})
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:

@@ -28,7 +28,7 @@ def process_chunk_star(arg: tuple[str|Path,int,int,list[str],str]):
     return process_chunk(*arg)
 
 def pretokenize_for_training(
-    input_path: str,
+    input_path: str | Path,
     special_tokens: list[str],
     pretokenizer_pattern: str = r"...",
     num_processes: int = 8,
@@ -70,7 +70,7 @@ def pretokenize_for_training(
 
 
 def pretokenize_for_training_slow(
-        input_path: str,
+        input_path: str | Path,
         special_tokens: list[str],
         pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
     ) -> dict[tuple[bytes,...],int]:
@@ -155,7 +155,7 @@ def merge_pretoken(ptk: tuple[bytes,...], to_merge: tuple[bytes,bytes]) -> tuple
     return tuple(out)
 
 def train_bpe(
-        input_path: str,
+        input_path: str | Path,
         vocab_size: int,
         special_tokens: list[str],
         pretokenizer_pattern: str = r"'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
