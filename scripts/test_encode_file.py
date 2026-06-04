@@ -11,4 +11,4 @@ ts_tokenizer = Tokenizer.from_files(
     ts_special_tokens
 )
 
-encode_file_to_chunks(ts_tokenizer,"data/owt_valid.txt",'test123')
+encode_file_to_chunks(ts_tokenizer,"data/owt_valid.txt",'results/test_encode_file_to_chunks')

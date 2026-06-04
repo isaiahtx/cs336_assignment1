@@ -11,7 +11,7 @@ from torch import Tensor
 
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
-from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU
+from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding
 import einx
 
 def run_linear(
@@ -215,7 +215,8 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    rope = RotaryPositionalEmbedding(theta=theta,d_k=d_k,max_seq_len=max_seq_len)
+    return rope(in_query_or_key,token_positions)
 
 
 def run_transformer_block(
@@ -448,7 +449,13 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+
+    # I am NOT implementing softmax myself lmao.
+    # Kind of cursed but want to use einx
+    while dim < 0:
+        dim += len(in_features.shape)
+    desc = " ".join((f"d{j}" if j != dim else f"[d{j}]") for j in range(len(in_features.shape)))
+    return einx.softmax(desc,in_features)
 
 
 def run_cross_entropy(
