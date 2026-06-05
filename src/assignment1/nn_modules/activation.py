@@ -40,6 +40,11 @@ class SwiGLU(nn.Module):
         nn.init.trunc_normal_(self.W3, std=std, a=-3*std, b=std)
     
     def forward(self, in_features: torch.Tensor) -> torch.Tensor:
+        """
+        in_features: (... d_ff)
+
+        returns (... d_model)
+        """
         L = self.silu(einx.dot("d_ff [d_model], ... [d_model] -> ... d_ff", self.W1, in_features))
         R = einx.dot("d_ff [d_model], ... [d_model] -> ... d_ff", self.W3, in_features)
         return einx.dot("d_model [d_ff], ... [d_ff] -> ... d_model", self.W2, L * R)

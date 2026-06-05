@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import einx
 import numpy as np
 
@@ -19,5 +19,10 @@ class Linear(nn.Module):
         self.W: nn.Parameter = nn.Parameter(torch.empty(out_features,in_features,dtype=dtype,device=device))
         nn.init.trunc_normal_(self.W, std=std, a=-3*std, b=3*std)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        x: (d_in)
+
+        returns: (d_out)
+        """
         return einx.dot("d_out [d_in], ... [d_in] -> ... d_out",self.W,x)

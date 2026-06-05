@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import einx
 
 class Embedding(nn.Module):
@@ -17,5 +17,10 @@ class Embedding(nn.Module):
         self.W: nn.Parameter = nn.Parameter(torch.empty((num_embeddings, embedding_dim),dtype=dtype,device=device))
         nn.init.trunc_normal_(self.W, a=-3, b=3)
 
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, token_ids: Tensor) -> Tensor:
+        """
+        token_ids: (...)
+
+        returns: (..., d_model)
+        """
         return einx.get_at("[vocab_size] d_model, ... -> ... d_model", self.W, token_ids)

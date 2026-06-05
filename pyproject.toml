@@ -59,3 +59,4 @@ reportImplicitOverride = false
 reportUnannotatedClassAttribute = false
 reportUnknownVariableType = false
 reportMissingTypeStubs = false
+reportConstantRedefinition = false

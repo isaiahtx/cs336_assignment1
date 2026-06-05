@@ -4,6 +4,8 @@ from torch import Tensor
 import einx
 import numpy as np
 
+from .rope import RotaryPositionalEmbedding
+
 def scaled_dot_product_attention(
         Q: Tensor,
         K: Tensor,
@@ -18,8 +20,15 @@ def scaled_dot_product_attention(
     probs = einx.softmax("... q [k]",logits)
 
     out = einx.dot("... q [k], ... [k] dv -> ... q dv",probs,V)
-    assert False
     return out
+
+
+def apply_rope_to_qk(Q: Tensor, rope: RotaryPositionalEmbedding, num_heads: int, token_positions: Tensor | None = None) -> Tensor:
+    token_positions = einx.id("... seq -> ... one seq",token_positions,one=1) if token_positions is not None else None
+    Q = einx.id("... seq (h dk) -> ... h seq dk",Q,h=num_heads)
+    Q= rope.forward(Q,token_positions)
+    return einx.id("... h q dk -> ... q (h dk)", Q,h=num_heads)
+
 
 class CausalMHA(nn.Module):
     def __init__(
@@ -28,6 +37,7 @@ class CausalMHA(nn.Module):
         num_heads: int,
         d_k: int | None = None,
         d_v: int | None = None,
+        rope: RotaryPositionalEmbedding | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None
     ):
@@ -42,6 +52,7 @@ class CausalMHA(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_k
         self.d_v = d_v
+        self.rope = rope
 
         self.W = nn.Parameter(torch.empty((num_heads * (d_k + d_k + d_v),d_model),dtype=dtype,device=device))
         self.WO = nn.Parameter(torch.empty((d_model,num_heads * d_v),dtype=dtype,device=device))
@@ -50,19 +61,29 @@ class CausalMHA(nn.Module):
             std = np.sqrt(2 / (mat.shape[0] + mat.shape[1]))
             nn.init.trunc_normal_(mat, std=std, a=-3*std, b = 3*std)
     
-    def forward(self,x: torch.Tensor) -> torch.Tensor:
+    def forward(self,x: Tensor, token_positions: Tensor | None = None) -> torch.Tensor:
+        """
+        x: (... seq d_model)
+        token_positions: (... seq) | None
+
+        returns: (... seq d_model)
+        """
         h = self.num_heads
         dk = self.d_k
         dv = self.d_v
-        q: int | None = None
+        seq_len: int | None = None
         if len(x.shape) > 1:
-            q = x.shape[-2]
+            seq_len = x.shape[-2]
 
-        Q, K, V = torch.split(einx.dot("stacked [d_model], ... q [d_model] -> ... q stacked", self.W, x),[h*dk,h*dk,h*dv],-1)
+        Q, K, V = torch.split(einx.dot("stacked [d_model], ... seq [d_model] -> ... seq stacked", self.W, x),[h*dk,h*dk,h*dv],-1)
+
+        if seq_len is not None and self.rope is not None:
+            Q = apply_rope_to_qk(Q,self.rope,h,token_positions=token_positions)
+            K = apply_rope_to_qk(K,self.rope,h,token_positions=token_positions)
 
         logits = einx.dot("... q (h [dk]), ... k (h [dk]) -> ... h q k",Q,K,h=h) / np.sqrt(dk)
 
-        if q is not None:
+        if seq_len is not None:
             mask = torch.triu(torch.ones_like(logits,dtype=torch.bool),diagonal=1)
             logits[mask] = -torch.inf
 
@@ -70,4 +91,4 @@ class CausalMHA(nn.Module):
 
         mha = einx.dot("... h q [k], ... [k] (h dv) -> ... q (h dv)",probs,V,h=h)
 
-        return einx.dot("dm [(h dv)], ... q [(h dv)] -> ... q dm",self.WO,mha,h=h)
+        return einx.dot("d_model [(h dv)], ... seq [(h dv)] -> ... seq d_model",self.WO,mha,h=h)

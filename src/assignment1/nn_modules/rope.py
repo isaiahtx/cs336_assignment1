@@ -1,6 +1,6 @@
 import torch
-import torch.nn as nn
-from torch import Tensor
+from torch import nn, Tensor
+from jaxtyping import Shaped
 import einx
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -15,22 +15,23 @@ class RotaryPositionalEmbedding(nn.Module):
         self.theta = theta
         self.d_k = d_k
         self.max_seq_len = max_seq_len
+        self.device = device
 
         d2 = d_k // 2
 
         angles: Tensor = einx.divide(
-            "seq_len, d2 -> seq_len d2",
+            "max_seq_len, d2 -> max_seq_len d2",
             torch.arange(0,max_seq_len,device=device),
             theta ** (2 * torch.arange(0,d2,device=device) / d_k)
         )
 
         cosines: Tensor = einx.id(  # pyright: ignore[reportAssignmentType]
-            "seq_len d2 -> seq_len (d2 two)",
+            "max_seq_len d2 -> max_seq_len (d2 two)",
             torch.cos(angles),
             two=2
         )
         alt_sines: Tensor = einx.multiply(
-            "seq_len d2, two -> seq_len (d2 two)",
+            "max_seq_len d2, two -> max_seq_len (d2 two)",
             torch.sin(angles),
             torch.tensor([-1,1],device=device)
         )
@@ -39,18 +40,28 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer('alt_sines', alt_sines, persistent=False)
 
 
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
-        #token_positions = einx.id("a -> b a",token_positions,b=x.shape[0])
+    def forward(self, x: Shaped[Tensor,"... seq_len d_k"], token_positions: Shaped[Tensor,"... seq_len"] | None = None) -> Shaped[Tensor,"... seq_len d_k"]:
+        """
+        x: (... seq_len d_k)
+        token_positions: (... seq_len) | None
+
+        returns (... seq_len d_k)
+        """
+        if token_positions is None:
+            token_positions = torch.arange(end=x.shape[-2],device=x.device).expand(x.shape[:-1])
+
         cosines: Tensor = einx.get_at(  # pyright: ignore[reportAssignmentType]
-            "[seq_len] d_k, ... seq_lent -> ... seq_lent d_k",
+            "[max_seq_len] d_k, ... seq_len -> ... seq_len d_k",
             self.cosines,
             token_positions
         )
+
         alt_sines: Tensor = einx.get_at(  # pyright: ignore[reportAssignmentType]
-            "[seq_len] d_k, ... seq_lent -> ... seq_lent d_k",
+            "[max_seq_len] d_k, ... seq_len -> ... seq_len d_k",
             self.alt_sines,
             token_positions
         )
+
         x_flipped_pairs: Tensor = einx.id(  # pyright: ignore[reportAssignmentType]
             "... d2 two -> ... (d2 two)",
             einx.flip(

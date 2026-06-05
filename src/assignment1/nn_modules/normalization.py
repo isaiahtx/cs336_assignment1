@@ -1,6 +1,8 @@
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import einx
+from jaxtyping import Shaped, Float
+from typing import Annotated
 
 class RMSNorm(nn.Module):
     def __init__(
@@ -16,7 +18,12 @@ class RMSNorm(nn.Module):
 
         self.gain = nn.Parameter(torch.ones(d_model,device=device,dtype=dtype))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Annotated[Tensor, "... d_model"]) -> Annotated[torch.Tensor,"... d_model"]:
+        """
+        x: (... d_model)
+
+        returns (... d_model)
+        """
         in_dtype = x.dtype
         x = x.to(torch.float32)
 

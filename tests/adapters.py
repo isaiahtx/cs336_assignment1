@@ -11,7 +11,7 @@ from torch import Tensor
 
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
-from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA
+from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA, TransformerBlock
 import einx
 
 def run_linear(
@@ -197,7 +197,14 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+
+    d_k = d_model // num_heads
+    rope = RotaryPositionalEmbedding(theta,d_k,max_seq_len)
+    cmha = CausalMHA(d_model,num_heads,rope=rope)
+
+    W = torch.concat((q_proj_weight,k_proj_weight,v_proj_weight),dim=-2)
+    cmha.load_state_dict({"W":W,"WO":o_proj_weight})
+    return cmha.forward(in_features,token_positions)
 
 
 def run_rope(
@@ -293,7 +300,34 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+
+    WQ = weights["attn.q_proj.weight"]
+    WK = weights["attn.k_proj.weight"]
+    WV = weights["attn.v_proj.weight"]
+    WO = weights["attn.output_proj.weight"]
+    Wln1 = weights['ln1.weight']
+    Wln2 = weights['ln2.weight']
+    W1 = weights['ffn.w1.weight']
+    W2 = weights['ffn.w2.weight']
+    W3 = weights['ffn.w3.weight']
+
+    tfb = TransformerBlock(
+        d_model,
+        num_heads,
+        max_seq_len,
+        d_ff,
+        theta=theta,
+    )
+
+    W = torch.concat((WQ,WK,WV),dim=-2)
+    tfb.cmha.load_state_dict({"W":W,"WO":WO})
+
+    tfb.ln1.load_state_dict({"gain":Wln1})
+    tfb.ln2.load_state_dict({"gain":Wln2})
+
+    tfb.ffnn.load_state_dict({"W1":W1,"W2":W2,"W3":W3})
+
+    return tfb.forward(in_features)
 
 
 def run_transformer_lm(
