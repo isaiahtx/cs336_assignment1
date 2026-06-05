@@ -32,7 +32,7 @@ class RotaryPositionalEmbedding(nn.Module):
         alt_sines: Tensor = einx.multiply(
             "seq_len d2, two -> seq_len (d2 two)",
             torch.sin(angles),
-            torch.tensor([-1,1])
+            torch.tensor([-1,1],device=device)
         )
 
         self.register_buffer('cosines',cosines, persistent=False)
@@ -62,7 +62,7 @@ class RotaryPositionalEmbedding(nn.Module):
                 )
             )
         )
-        return (cosines * x) + (alt_sines * x_flipped_pairs)
+        return cosines * x + alt_sines * x_flipped_pairs
 
 if __name__ == "__main__":
     theta = 10_000

@@ -11,7 +11,7 @@ from torch import Tensor
 
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
-from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding
+from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA
 import einx
 
 def run_linear(
@@ -119,7 +119,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return scaled_dot_product_attention(Q,K,V,mask=mask)
+
 
 
 def run_multihead_self_attention(
@@ -153,7 +154,10 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    cmha = CausalMHA(d_model,num_heads)
+    W = torch.concat((q_proj_weight,k_proj_weight,v_proj_weight),dim=-2)
+    cmha.load_state_dict({"W":W,"WO":o_proj_weight})
+    return cmha.forward(in_features)
 
 
 def run_multihead_self_attention_with_rope(
