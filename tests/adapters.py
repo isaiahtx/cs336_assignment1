@@ -8,11 +8,13 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+import einx
 
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
-from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA, TransformerBlock
-import einx
+from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA, TransformerBlock, SiLU
+from src.assignment1 import TransformerLM
+
 
 def run_linear(
     d_in: int,
@@ -301,34 +303,14 @@ def run_transformer_block(
         running the Transformer block on the input features while using RoPE.
     """
 
-    WQ = weights["attn.q_proj.weight"]
-    WK = weights["attn.k_proj.weight"]
-    WV = weights["attn.v_proj.weight"]
-    WO = weights["attn.output_proj.weight"]
-    Wln1 = weights['ln1.weight']
-    Wln2 = weights['ln2.weight']
-    W1 = weights['ffn.w1.weight']
-    W2 = weights['ffn.w2.weight']
-    W3 = weights['ffn.w3.weight']
-
-    tfb = TransformerBlock(
+    return TransformerBlock.from_weights(
         d_model,
         num_heads,
         max_seq_len,
         d_ff,
-        theta=theta,
-    )
-
-    W = torch.concat((WQ,WK,WV),dim=-2)
-    tfb.cmha.load_state_dict({"W":W,"WO":WO})
-
-    tfb.ln1.load_state_dict({"gain":Wln1})
-    tfb.ln2.load_state_dict({"gain":Wln2})
-
-    tfb.ffnn.load_state_dict({"W1":W1,"W2":W2,"W3":W3})
-
-    return tfb.forward(in_features)
-
+        theta,
+        weights
+    ).forward(in_features)
 
 def run_transformer_lm(
     vocab_size: int,
@@ -409,7 +391,16 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    return TransformerLM.from_weights(
+        vocab_size,
+        context_length,
+        d_model,
+        num_layers,
+        num_heads,
+        d_ff,
+        rope_theta
+        ,weights
+    ).forward(in_indices)
 
 
 def run_rmsnorm(
@@ -448,7 +439,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    silu = SiLU()
+    return silu.forward(in_features)
 
 
 def run_get_batch(

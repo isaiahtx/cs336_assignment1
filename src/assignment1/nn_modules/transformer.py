@@ -4,6 +4,7 @@ from .rope import RotaryPositionalEmbedding
 from .normalization import RMSNorm
 from .attention import CausalMHA
 from .activation import SwiGLU
+from typing import Self
 
 class TransformerBlock(nn.Module):
     def __init__(
@@ -60,6 +61,45 @@ class TransformerBlock(nn.Module):
             device=device,
             dtype=dtype
         )
+
+
+    @classmethod
+    def from_weights(
+            cls,
+            d_model: int,
+            num_heads: int,
+            max_seq_len: int,
+            d_ff: int,
+            theta: float,
+            weights: dict[str,Tensor]
+        ) -> Self:
+        WQ = weights["attn.q_proj.weight"]
+        WK = weights["attn.k_proj.weight"]
+        WV = weights["attn.v_proj.weight"]
+        WO = weights["attn.output_proj.weight"]
+        Wln1 = weights['ln1.weight']
+        Wln2 = weights['ln2.weight']
+        W1 = weights['ffn.w1.weight']
+        W2 = weights['ffn.w2.weight']
+        W3 = weights['ffn.w3.weight']
+
+        tfb = cls(
+            d_model,
+            num_heads,
+            max_seq_len,
+            d_ff,
+            theta=theta,
+        )
+
+        W = torch.concat((WQ,WK,WV),dim=-2)
+        tfb.cmha.load_state_dict({"W":W,"WO":WO})
+
+        tfb.ln1.load_state_dict({"gain":Wln1})
+        tfb.ln2.load_state_dict({"gain":Wln2})
+
+        tfb.ffnn.load_state_dict({"W1":W1,"W2":W2,"W3":W3})
+
+        return tfb
         
 
     def forward(self, x:Tensor) -> Tensor:
