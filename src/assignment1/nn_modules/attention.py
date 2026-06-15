@@ -65,8 +65,8 @@ class CausalMHA(nn.Module):
         # number of flops needed for a single foward pass on a sequence of length seq
         mult1 = (2 * seq * self.d_model * self.num_heads * (2 * self.d_k + self.d_v))
         mult2 = 2 * (seq ** 2) * self.d_k * self.num_heads
-        mult3 = 2 * (self.num_heads ** 2) * (seq ** 2) * self.d_v
-        mult4 = 2 * (seq ** 2) * self.d_v * self.num_heads
+        mult3 = 2 * (seq ** 2) * self.num_heads * self.d_v
+        mult4 = 2 * self.d_model * self.num_heads * self.d_v * seq
 
         return mult1 + mult2 + mult3 + mult4
     

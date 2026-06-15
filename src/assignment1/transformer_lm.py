@@ -58,7 +58,7 @@ class TransformerLM(nn.Module):
         self.lm_head = Linear(d_model, vocab_size)
 
 
-    def total_memory_usage(self) -> None:
+    def print_total_memory_usage(self, b: int = 1) -> None:
         print("P = v d_m + n_l (2d_m + h d_m (2d_k + d_v) + h d_m d_v + 3 d_ff d_m) + d_m + v d_m")
         print("A = n_l (4 b s d_m + 2 b s h (d_k + d_v) + 2 b h s^2 + 4 b s d_ff) + b s d_m + 2 b s v")
         print("Assuming d_k = d_v = d_m / h AND d_ff = (8/3) d_m, then:")
@@ -66,7 +66,24 @@ class TransformerLM(nn.Module):
         print("\tA= b (2n_l h s^2 + ((56/3) n_l d_m + d_m + 2v) s)\n\t\t(dominant term switches from (56/3) n_l d_m b s to 2n_l h b s^2) when s ~ 9.3d_k")
         print("Weights: P, Gradients: P, AdamW state: 2P, Activations: A")
 
+        v = self.vocab_size
+        s = self.context_length
+        dm = self.d_model
+        nl = self.num_layers
+        h = self.num_heads
+        P = (2 * v + 2 * nl + 1) * dm + 12 * nl * (dm ** 2)
+        A = int(b * (2 * nl * h * (s ** 2) + ((56/3) * nl * dm + dm + 2 * v) * s))
+        print(f"Memory usage for our model (assuming d_ff == (8/3) d_m and a batch size of {b}):\n\t- P = {P:,} ({P*4/(1024 ** 3):,.3f}GiB)\n\t- A = {A:,} ({A*4/(1024 ** 3):,.3f}GiB)")
+        total = 4 * P + A
+        print(f"Total: (4P + A) = {total:,} floats ({total * 4 / (1024 ** 3):,.3f}GiB)")
+        print()
+        slope = A * 4 / (1024 ** 3)
+        intercept = P * 16 / (1024 ** 3)
+        print(f"The formula mapping batch_size -> memory for this model is\n\t mem = {slope:,.3f} * batch_size + {intercept:,.3f}")
+        print(f"Given 80 GiB of memory, one could train with a batch size of {int((80 - intercept) / slope)}")
+
     def flops(self, seq: int) -> int:
+        print("Assuming d_k = d_v = d_m / h and d_ff = (8/3) d_m:\n\tn_l (24s d_m^2 + 4s^2 d_m) + 2s v d_m FLOPS")
         out = sum(map(lambda tfb: tfb.flops(seq),self.transformer_blocks))
         out += 2 * seq * self.vocab_size * self.d_model  # Final linear layer
         return out
@@ -136,11 +153,32 @@ if __name__ == "__main__":
         4_288,
         10_000
     )
-
-    print(list(tlm.parameters()))
+    print()
+    print()
+    tlm.print_total_memory_usage()
+    print()
+    print()
 
     num_params = sum(p.numel() for p in tlm.parameters())
-    print(f"GPT-2 XL-sized model has {num_params:,} parameters, which take a total of {num_params * 4 / (1024 ** 3):.2f}GB to store")
+    print(f"GPT-2 XL-sized model has {num_params:,} parameters, which take a total of {num_params * 4 / (1024 ** 3):.3f}GiB to store")
+    print()
+    fp_TFLOP = tlm.flops(tlm.context_length) / 1e12
+    print(f"Uses {fp_TFLOP:,.3f} TFLOP per forward pass")
+
+    TFLOPS = 495
+    MFU = 0.5
+    actual_TFLOPS = TFLOPS * MFU
+    batch_size = 1_024
+    steps = 400_000
+
+    total_training_flops = steps * batch_size * fp_TFLOP * 3
+
+    total_s = total_training_flops / actual_TFLOPS
+    d, rem = divmod(total_s, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
+
+    print(f"Given {TFLOPS} TFLOPS and MFU={MFU}, would take {int(d)} days, {int(h)}h {int(m)}m {s:.1f}s to train {steps:,} steps with batch size {batch_size:,}")
 
     # from src.assignment1.bpe.tokenizer import Tokenizer
     # import pickle
