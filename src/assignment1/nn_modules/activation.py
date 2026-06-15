@@ -38,6 +38,10 @@ class SwiGLU(nn.Module):
         nn.init.trunc_normal_(self.W1, std=std, a=-3*std, b=std)
         nn.init.trunc_normal_(self.W2, std=std, a=-3*std, b=std)
         nn.init.trunc_normal_(self.W3, std=std, a=-3*std, b=std)
+
+    def flops(self) -> int:
+        # Number of FLOPS for single forward pass with a 1d input array
+        return 6 * self.d_model * self.d_ff
     
     def forward(self, in_features: torch.Tensor) -> torch.Tensor:
         """

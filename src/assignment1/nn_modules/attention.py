@@ -61,6 +61,15 @@ class CausalMHA(nn.Module):
             std = np.sqrt(2 / (mat.shape[0] + mat.shape[1]))
             nn.init.trunc_normal_(mat, std=std, a=-3*std, b = 3*std)
     
+    def flops(self, seq: int) -> int:
+        # number of flops needed for a single foward pass on a sequence of length seq
+        mult1 = (2 * seq * self.d_model * self.num_heads * (2 * self.d_k + self.d_v))
+        mult2 = 2 * (seq ** 2) * self.d_k * self.num_heads
+        mult3 = 2 * (self.num_heads ** 2) * (seq ** 2) * self.d_v
+        mult4 = 2 * (seq ** 2) * self.d_v * self.num_heads
+
+        return mult1 + mult2 + mult3 + mult4
+    
     def forward(self,x: Tensor, token_positions: Tensor | None = None) -> torch.Tensor:
         """
         x: (... seq d_model)
@@ -75,12 +84,14 @@ class CausalMHA(nn.Module):
         if len(x.shape) > 1:
             seq_len = x.shape[-2]
 
+        # Multiplication 1
         Q, K, V = torch.split(einx.dot("stacked [d_model], ... seq [d_model] -> ... seq stacked", self.W, x),[h*dk,h*dk,h*dv],-1)
 
         if seq_len is not None and self.rope is not None:
             Q = apply_rope_to_qk(Q,self.rope,h,token_positions=token_positions)
             K = apply_rope_to_qk(K,self.rope,h,token_positions=token_positions)
 
+        # Multiplication 2
         logits = einx.dot("... q (h [dk]), ... k (h [dk]) -> ... h q k",Q,K,h=h) / np.sqrt(dk)
 
         if seq_len is not None:
@@ -89,6 +100,8 @@ class CausalMHA(nn.Module):
 
         probs = einx.softmax("... h q [k]",logits)
 
+        # Multiplication 3
         mha = einx.dot("... h q [k], ... [k] (h dv) -> ... q (h dv)",probs,V,h=h)
 
-        return einx.dot("d_model [(h dv)], ... seq [(h dv)] -> ... seq d_model",self.WO,mha,h=h)
+        # Multiplication 4
+        return einx.dot("d_model [h_dv], ... seq [h_dv] -> ... seq d_model",self.WO,mha,h=h)

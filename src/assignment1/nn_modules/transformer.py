@@ -15,7 +15,8 @@ class TransformerBlock(nn.Module):
         d_ff: int,
         d_k: int | None = None,
         d_v: int | None = None,
-        theta: float = 10_000,
+        theta: float | None = 10_000,
+        rope: RotaryPositionalEmbedding | None = None,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ):
@@ -40,12 +41,19 @@ class TransformerBlock(nn.Module):
             dtype=dtype,
             device=device
         )
-        self.rope = RotaryPositionalEmbedding(
-            theta=theta,
-            d_k=d_k,
-            max_seq_len=max_seq_len,
-            device=device
-        )
+
+        if rope is not None:
+            self.rope = rope
+        elif theta is not None:
+            self.rope = RotaryPositionalEmbedding(
+                theta=theta,
+                d_k=d_k,
+                max_seq_len=max_seq_len,
+                device=device
+            )
+        else:
+            raise ValueError("One of `rope` or `theta` must be defined")
+
         self.cmha = CausalMHA(
             d_model,
             num_heads,
@@ -63,6 +71,10 @@ class TransformerBlock(nn.Module):
         )
 
 
+    def flops(self, seq: int) -> int:
+        return self.cmha.flops(seq) + seq * self.ffnn.flops()
+
+
     @classmethod
     def from_weights(
             cls,
@@ -71,7 +83,9 @@ class TransformerBlock(nn.Module):
             max_seq_len: int,
             d_ff: int,
             theta: float,
-            weights: dict[str,Tensor]
+            weights: dict[str,Tensor],
+            d_k: int | None = None,
+            d_v: int | None = None,
         ) -> Self:
         WQ = weights["attn.q_proj.weight"]
         WK = weights["attn.k_proj.weight"]
@@ -89,6 +103,8 @@ class TransformerBlock(nn.Module):
             max_seq_len,
             d_ff,
             theta=theta,
+            d_k=d_k,
+            d_v=d_v
         )
 
         W = torch.concat((WQ,WK,WV),dim=-2)

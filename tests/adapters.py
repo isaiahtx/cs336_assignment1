@@ -13,7 +13,8 @@ import einx
 from src.assignment1.bpe.train import train_bpe
 from src.assignment1.bpe.tokenizer import Tokenizer
 from src.assignment1.nn_modules import Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, scaled_dot_product_attention, CausalMHA, TransformerBlock, SiLU
-from src.assignment1 import TransformerLM
+from src.assignment1 import TransformerLM, cross_entropy
+from src.assignment1.optimizers import AdamW
 
 
 def run_linear(
@@ -503,7 +504,7 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    return cross_entropy(inputs,targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -522,7 +523,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
